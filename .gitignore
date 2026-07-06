@@ -1,0 +1,18 @@
+**/old/
+.conda/
+translate.ipynb
+
+# Raw UDS dataset (large, LFS-hosted upstream) - download separately, see README
+data/uds_data/
+
+# Generated per-trip time-series dataset (preprocessing/02_trip_timeseries)
+data/processed/
+preprocessing/02_trip_timeseries/run_full.log
+
+# Model training outputs (training/03_soc_forecasting)
+runs/
+
+# Python virtual environment & caches
+.venv/
+__pycache__/
+*.pyc

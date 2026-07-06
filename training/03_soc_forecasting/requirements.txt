@@ -1,0 +1,7 @@
+pandas == 2.2.2
+numpy == 1.26.4
+pyarrow == 21.0.0
+# CPU wheel: pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch >= 2.2
+tqdm
+matplotlib
