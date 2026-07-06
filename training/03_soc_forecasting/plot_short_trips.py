@@ -1,7 +1,9 @@
 """
-Plot true vs. predicted SoC for real trips shorter than INPUT_LEN (600 s /
-10 min), predicting from the very start of the trip (t=0) instead of waiting
-for a full real window like evaluate.rollout_trip.
+Plot true vs. predicted SoC for real trips, predicting from the very start of
+the trip (t=0) instead of waiting for a full real window like
+evaluate.rollout_trip. Defaults to trips shorter than INPUT_LEN (600 s /
+10 min), but --min-duration/--max-duration select any duration range (e.g.
+trips around 20 min, which do reach a fully-real window partway through).
 
 At each stride step (30 s) the input window is built from whatever real rows
 precede the anchor, zero/mask-padded on the left up to length L -- the same
@@ -10,13 +12,14 @@ convention finalize_trips() already uses for a channel that's never observed
 real rows (anchor+1 >= L), the padded portion is empty and the window is
 exactly the normal full real window, so predictions naturally transition from
 "padded" to "sliding" as more of the trip becomes available -- no separate
-code path needed. Each prediction uses the trip's *true* SoC at the anchor
-(not chained off a previous prediction), isolating the effect of padding from
-compounding rollout error.
+code path needed, and this works the same way regardless of trip length.
+Each prediction uses the trip's *true* SoC at the anchor (not chained off a
+previous prediction), isolating the effect of padding from compounding
+rollout error.
 
 Usage:
-    python plot_short_trips.py --run full_v1                 # 4 shortest eligible trips
-    python plot_short_trips.py --run full_v1 --n-trips 8
+    python plot_short_trips.py --run full_v1                                  # 4 shortest trips (<10 min)
+    python plot_short_trips.py --run full_v1 --min-duration 19 --max-duration 21 --n-trips 4
     python plot_short_trips.py --run full_v1 --vehicle ID2 --trip-id 187
 """
 
@@ -73,6 +76,10 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--run", required=True)
     p.add_argument("--n-trips", type=int, default=4)
+    p.add_argument("--min-duration", type=float, default=None,
+                    help="minutes; select trips >= this duration (default: no lower bound)")
+    p.add_argument("--max-duration", type=float, default=None,
+                    help="minutes; select trips <= this duration (default: INPUT_LEN, i.e. short trips)")
     p.add_argument("--vehicle", default=None)
     p.add_argument("--trip-id", type=int, default=None)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -94,16 +101,18 @@ def main():
     print(f"loaded {run_dir / 'best.pt'} (epoch {ckpt['epoch']}, val MAE {ckpt['val_mae_pp']:.4f} pp)")
 
     index = pd.read_parquet(REPO_ROOT / config.INDEX_PATH)
-    short = index[index.n_rows < config.INPUT_LEN].copy()
-    print(f"{len(short)} real trips shorter than INPUT_LEN ({config.INPUT_LEN}s / "
-          f"{config.INPUT_LEN / 60:.1f} min) out of {len(index)} total")
+    min_dur = args.min_duration if args.min_duration is not None else 0.0
+    max_dur = args.max_duration if args.max_duration is not None else config.INPUT_LEN / 60.0
+    pool = index[(index.duration_min >= min_dur) & (index.duration_min <= max_dur)].copy()
+    print(f"{len(pool)} real trips with duration in [{min_dur:.1f}, {max_dur:.1f}] min "
+          f"out of {len(index)} total (INPUT_LEN = {config.INPUT_LEN / 60:.1f} min)")
 
     if args.vehicle is not None and args.trip_id is not None:
-        chosen = short[(short.vehicle_id == args.vehicle) & (short.trip_id == args.trip_id)]
+        chosen = pool[(pool.vehicle_id == args.vehicle) & (pool.trip_id == args.trip_id)]
         if chosen.empty:
-            raise SystemExit(f"{args.vehicle} trip {args.trip_id} is not in the index or is not short")
+            raise SystemExit(f"{args.vehicle} trip {args.trip_id} is not in the index or not in that duration range")
     else:
-        chosen = short.sort_values("n_rows", ascending=True).head(args.n_trips)
+        chosen = pool.sort_values("duration_min", ascending=True).head(args.n_trips)
 
     trips = load_trips(chosen)
     finalize_trips(trips, scaler)  # use the TRAINED scaler, do not refit
