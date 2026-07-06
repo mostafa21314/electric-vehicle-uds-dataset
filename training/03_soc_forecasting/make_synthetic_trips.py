@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 
 import config
-from dataset import REPO_ROOT
+from dataset import REPO_ROOT, load_split_index
 
 FEATURES = config.FEATURES
 
@@ -63,6 +63,8 @@ def build_index_row(vehicle_id, trip_id, path, df):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--n-trips", type=int, default=8, help="how many synthetic trips to make")
+    p.add_argument("--split", default="val", choices=["train", "val", "test"],
+                   help="only copy trips from this split (default: val, i.e. held-out from training)")
     p.add_argument("--mode", choices=["zero", "nan"], default="zero",
                    help="fill leading half-window with literal 0.0 or with NaN (missing)")
     p.add_argument("--out", default="data/processed/trips_synthetic",
@@ -76,11 +78,13 @@ def main():
     out_dir = REPO_ROOT / args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    index = pd.read_parquet(REPO_ROOT / config.INDEX_PATH)
+    index = load_split_index()  # same train/val/test assignment used in build_datasets/training
+    index = index[index.split == args.split]
     eligible = index[index.n_rows >= min_rows].sort_values("n_rows", ascending=False)
     chosen = eligible.head(args.n_trips)
+    print(f"picking from {len(eligible)} eligible '{args.split}'-split trips (>= {min_rows} rows)")
     if len(chosen) < args.n_trips:
-        print(f"warning: only {len(chosen)} trips have >= {min_rows} rows")
+        print(f"warning: only {len(chosen)} trips have >= {min_rows} rows in the {args.split} split")
 
     rows = []
     for src in chosen.itertuples():

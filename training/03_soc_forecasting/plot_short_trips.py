@@ -33,7 +33,7 @@ import pandas as pd
 import torch
 
 import config
-from dataset import REPO_ROOT, load_trips, finalize_trips
+from dataset import REPO_ROOT, load_split_index, load_trips, finalize_trips
 from model import LSTMTransformer
 
 TRUE_COLOR = "#2a78d6"  # categorical slot 1 (blue)
@@ -75,6 +75,8 @@ def predict_from_start(t, model, device, target_std):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--run", required=True)
+    p.add_argument("--split", default="val", choices=["train", "val", "test"],
+                    help="only pick trips from this split (default: val, i.e. held-out from training)")
     p.add_argument("--n-trips", type=int, default=4)
     p.add_argument("--min-duration", type=float, default=None,
                     help="minutes; select trips >= this duration (default: no lower bound)")
@@ -100,12 +102,13 @@ def main():
     model.to(device).eval()
     print(f"loaded {run_dir / 'best.pt'} (epoch {ckpt['epoch']}, val MAE {ckpt['val_mae_pp']:.4f} pp)")
 
-    index = pd.read_parquet(REPO_ROOT / config.INDEX_PATH)
+    index = load_split_index()  # same train/val/test assignment used in build_datasets/training
+    index = index[index.split == args.split]
     min_dur = args.min_duration if args.min_duration is not None else 0.0
     max_dur = args.max_duration if args.max_duration is not None else config.INPUT_LEN / 60.0
     pool = index[(index.duration_min >= min_dur) & (index.duration_min <= max_dur)].copy()
-    print(f"{len(pool)} real trips with duration in [{min_dur:.1f}, {max_dur:.1f}] min "
-          f"out of {len(index)} total (INPUT_LEN = {config.INPUT_LEN / 60:.1f} min)")
+    print(f"{len(pool)} '{args.split}'-split trips with duration in [{min_dur:.1f}, {max_dur:.1f}] min "
+          f"out of {len(index)} in that split (INPUT_LEN = {config.INPUT_LEN / 60:.1f} min)")
 
     if args.vehicle is not None and args.trip_id is not None:
         chosen = pool[(pool.vehicle_id == args.vehicle) & (pool.trip_id == args.trip_id)]
@@ -144,7 +147,7 @@ def main():
                     ha="left", fontsize=8, color="#52514e")
         ax.set_xlabel("minutes into trip")
         ax.set_ylabel("SoC (%)")
-        ax.set_title(f"{row.vehicle_id} trip {row.trip_id} -- {row.duration_min:.1f} min trip")
+        ax.set_title(f"{row.vehicle_id} trip {row.trip_id} -- {row.duration_min:.1f} min ({args.split} split)")
         ax.legend(frameon=False)
         ax.spines[["top", "right"]].set_visible(False)
         fig.tight_layout()
