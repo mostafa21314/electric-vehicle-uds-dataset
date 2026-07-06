@@ -32,8 +32,8 @@ TRAIN_FRAC = 0.70
 VAL_FRAC = 0.15  # test = remainder
 
 # --- Windowing ---------------------------------------------------------------
-INPUT_LEN = 300      # input window length in steps (1 Hz -> 5 min)
-HORIZON = 300        # forecast horizon in seconds; target = soc[t0+H] - soc[t0]
+INPUT_LEN = 600      # input window length in steps (1 Hz -> 10 min)
+HORIZON = 150        # forecast horizon in seconds; target = soc[t0+H] - soc[t0]
 STRIDE = 30          # window start spacing within a trip (seconds)
 # Validity filters (windows failing these are dropped at index-build time):
 MIN_SOC_COV = 0.90   # min fraction of observed (non-imputed) SoC inside input window

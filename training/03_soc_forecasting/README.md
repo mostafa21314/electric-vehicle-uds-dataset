@@ -2,7 +2,7 @@
 
 First model-training stage of the pipeline. Trains a PyTorch **LSTM → Transformer-encoder**
 sequence model to forecast the battery State of Charge of the TUM EV fleet from the past
-5 minutes of live diagnostics, following the architecture of
+10 minutes of live diagnostics, following the architecture of
 
 > Feng et al., *Energy consumption prediction strategy for electric vehicle based on
 > LSTM-Transformer framework*, Energy 302 (2024) 131780.
@@ -13,17 +13,19 @@ Consumes the per-trip 1 Hz parquets built by
 
 ## Task formulation
 
-- **Input** — a 300-step (5 min, 1 Hz) window of 7 signals (speed, SoC, pack voltage,
+- **Input** — a 600-step (10 min, 1 Hz) window of 7 signals (speed, SoC, pack voltage,
   aux power, battery inlet/outlet temps, ambient), plus derived acceleration and a binary
   missingness flag per signal → **15 channels per timestep**.
-- **Target** — **ΔSoC** = `soc[t₀+300 s] − soc[t₀]` in percentage points (scalar).
+- **Target** — **ΔSoC** = `soc[t₀+150 s] − soc[t₀]` in percentage points (scalar).
   ΔSoC rather than absolute SoC because SoC % maps to different energy per vehicle;
   a learned **vehicle embedding** (7 vehicles → 8-d) absorbs per-vehicle capacity /
   efficiency differences. Absolute forecasts are reconstructed as
   `SoC(t₀) + ΔSoC_pred` and chained over a trip (paper Eq. 27).
-- **Horizon = 300 s** because the raw SoC signal is quantized at ~0.4 pp — a 60 s ΔSoC
-  (std ≈ 0.22 pp) is below that noise floor, while 300 s ΔSoC (std ≈ 1.6 pp on train
-  windows) carries real signal.
+- **Horizon = 150 s.** (The original 300 s choice was justified by the raw SoC
+  quantization noise floor — a 60 s ΔSoC, std ≈ 0.22 pp, was below it, while 300 s ΔSoC,
+  std ≈ 1.6 pp, carried real signal. That tradeoff hasn't been re-measured at 150 s;
+  rerun `python dataset.py` / check ΔSoC std on train windows if you want to confirm
+  it's still above the noise floor.)
 
 ## Differences from the paper (deliberate)
 
@@ -39,8 +41,9 @@ Consumes the per-trip 1 Hz parquets built by
 - **Split** — chronological **at trip level**: trips sorted by `start_time`, whole trips
   assigned 70 / 15 / 15 to train/val/test (1544 / 331 / 332 trips). Windows are cut
   *after* the split and never cross trip boundaries, so train and test share no trips.
-- **Windows** — length 300, stride 30 s, target 300 s ahead → ~35k train / 6k val /
-  6.9k test windows. Trips shorter than 10 min yield no windows.
+- **Windows** — length 600, stride 30 s, target 150 s ahead. Trips shorter than
+  12.5 min (`INPUT_LEN + HORIZON`) yield no windows. (Window counts change with these
+  settings; rerun `python dataset.py` for current split sizes.)
 - **Missing data** — never fabricated for the target: a window is kept only if SoC is
   actually observed at both ends of the horizon and SoC/speed coverage in the input is
   ≥ 90%. Input NaNs are ffill/bfill-imputed (train-mean for never-observed channels) and

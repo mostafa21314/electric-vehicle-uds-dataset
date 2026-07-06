@@ -46,7 +46,7 @@ DOWNSAMPLE_BY_MEAN = {"speed", "pack_voltage", "aux_power"}
 
 # --- Resampling --------------------------------------------------------------
 RESAMPLE_FREQ = "1s"     # common time grid (pandas offset alias)
-MAX_INTERP_GAP_S = 30    # do not interpolate across gaps longer than this (seconds)
+MAX_INTERP_GAP_S = 20    # do not interpolate across gaps longer than this (seconds)
 
 # --- Trip segmentation & filtering ------------------------------------------
 GAP_SECONDS = 120        # a gap in the speed signal larger than this splits trips
